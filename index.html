@@ -3,37 +3,208 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-  <title>ChatRoom</title>
+  <title>ChatRoom - Masum's Dev Lab</title>
   <style>
+    /* আপনার আগের CSS হুবহু এখানে থাকবে */
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    :root { --bg: #0f0f1a; --panel: #1a1a2e; --header: #16213e; --border: #2a2a4a; --accent: #6366f1; --accent2: #8b5cf6; --green: #6ee7b7; --text: #fff; --muted: #aaa; --bubble-other: #2a2a4a; }
+    html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); display: flex; align-items: center; justify-content: center; }
+    #loading { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: var(--muted); z-index: 999; }
+    .dot::after { content:''; animation: dots 1.4s infinite; }
+    @keyframes dots { 0%{content:''} 33%{content:'.'} 66%{content:'..'} 100%{content:'...'} }
+    #login-screen { display: none; text-align: center; padding: 40px 32px; background: var(--panel); border-radius: 24px; width: min(340px, 92vw); box-shadow: 0 0 50px rgba(99,102,241,.3); }
+    #google-btn { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; padding: 14px; background: #fff; color: #333; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; }
+    #app { display: none; width: 100vw; height: 100dvh; max-width: 900px; background: var(--panel); flex-direction: column; position: relative; }
+    #app-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--header); border-bottom: 1px solid var(--border); }
+    #messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth; }
+    .msg-wrapper { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 5px; }
+    .msg-wrapper.mine { flex-direction: row-reverse; }
+    .msg-avatar { width: 28px; height: 28px; border-radius: 50%; }
+    .msg-bubble { padding: 9px 13px; border-radius: 18px; font-size: .9rem; max-width: 70%; word-break: break-word; }
+    .msg-wrapper.mine .msg-bubble { background: linear-gradient(135deg, var(--accent), var(--accent2)); border-bottom-right-radius: 4px; }
+    .msg-wrapper:not(.mine) .msg-bubble { background: var(--bubble-other); border-bottom-left-radius: 4px; }
+    #input-area { display: flex; gap: 8px; padding: 12px 16px; background: var(--header); border-top: 1px solid var(--border); }
+    #msg-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 11px 15px; color: #fff; outline: none; }
+    #send-btn { background: var(--accent); border: none; border-radius: 12px; width: 46px; height: 46px; cursor: pointer; color: white; }
+    #search-panel { display: none; padding: 10px; background: var(--header); }
+    #search-panel.open { display: block; }
+    .day-divider { text-align: center; font-size: .72rem; color: #555; padding: 15px 0; display: flex; align-items: center; gap: 8px; }
+    .day-divider::before, .day-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  </style>
+</head>
+<body>
 
-    :root {
-      --bg:       #0f0f1a;
-      --panel:    #1a1a2e;
-      --header:   #16213e;
-      --border:   #2a2a4a;
-      --accent:   #6366f1;
-      --accent2:  #8b5cf6;
-      --green:    #6ee7b7;
-      --text:     #fff;
-      --muted:    #aaa;
-      --bubble-other: #2a2a4a;
+<div id="loading"><span class="dot">Loading</span></div>
+
+<div id="login-screen">
+  <h1>💬 ChatRoom</h1>
+  <p>Sign in to start chatting</p>
+  <button id="google-btn">
+    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="" width="20"/>
+    Continue with Google
+  </button>
+</div>
+
+<div id="app">
+  <div id="app-header">
+    <div class="header-left">
+      <div id="room-title">💬 ChatRoom</div>
+      <div id="room-sub" style="font-size: 10px; color: #6ee7b7;">● Online</div>
+    </div>
+    <div class="header-right">
+      <button id="search-toggle-btn" style="background:none; border:1px solid #333; color:#aaa; padding:5px; border-radius:5px; cursor:pointer;">🔍 Search</button>
+      <img id="user-avatar" src="" alt="" style="width:30px; border-radius:50%; margin-left:10px; cursor:pointer;"/>
+    </div>
+  </div>
+
+  <div id="search-panel">
+    <input id="user-search-input" type="text" placeholder="Search users..." style="width:100%; padding:8px; border-radius:5px; border:none; background:#000; color:#fff;"/>
+    <div id="search-results"></div>
+  </div>
+
+  <div id="messages"></div>
+
+  <div id="input-area">
+    <input id="msg-input" type="text" placeholder="Type a message..." maxlength="500"/>
+    <button id="send-btn">➤</button>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, limit, doc, setDoc, getDocs, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ফায়ারবেস কনফিগারেশন
+const firebaseConfig = {
+  apiKey: "AIzaSyC7ZZPQZMhpF0387z7zttH_k7JLl1K2pG4",
+  authDomain: "my-chat-app-d6889.firebaseapp.com",
+  projectId: "my-chat-app-d6889",
+  storageBucket: "my-chat-app-d6889.firebasestorage.app",
+  messagingSenderId: "656889790538",
+  appId: "1:656889790538:web:25f264816e46624999e6b3"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const loading = document.getElementById('loading');
+const loginScreen = document.getElementById('login-screen');
+const appShell = document.getElementById('app');
+const userAvatar = document.getElementById('user-avatar');
+const messagesDiv = document.getElementById('messages');
+const msgInput = document.getElementById('msg-input');
+const sendBtn = document.getElementById('send-btn');
+
+let currentUser = null;
+let lastDate = null;
+
+// Auth State
+onAuthStateChanged(auth, async user => {
+  loading.style.display = 'none';
+  if (user) {
+    currentUser = user;
+    userAvatar.src = user.photoURL;
+    loginScreen.style.display = 'none';
+    appShell.style.display = 'flex';
+    await saveUserProfile(user);
+    listenMessages();
+  } else {
+    loginScreen.style.display = 'block';
+    appShell.style.display = 'none';
+  }
+});
+
+// Login
+document.getElementById('google-btn').onclick = () => signInWithPopup(auth, new GoogleAuthProvider());
+userAvatar.onclick = () => { if(confirm("Logout?")) signOut(auth); };
+
+// Save User
+async function saveUserProfile(user) {
+  await setDoc(doc(db, 'users', user.uid), {
+    name: user.displayName,
+    photoURL: user.photoURL,
+    nameLower: user.displayName.toLowerCase(),
+    lastSeen: serverTimestamp()
+  }, { merge: true });
+}
+
+// Send Message
+async function sendMessage() {
+  const text = msgInput.value.trim();
+  if (!text || !currentUser) return;
+  msgInput.value = '';
+  try {
+    await addDoc(collection(db, 'messages'), {
+      text,
+      uid: currentUser.uid,
+      name: currentUser.displayName,
+      photoURL: currentUser.photoURL,
+      createdAt: serverTimestamp()
+    });
+  } catch (e) { console.error(e); }
+}
+
+sendBtn.onclick = sendMessage;
+msgInput.onkeydown = e => { if(e.key === 'Enter') sendMessage(); };
+
+// Listen Messages
+function listenMessages() {
+  // আগের মেসেজগুলো মুছে ফেলুন যাতে ডুপ্লিকেট না হয়
+  messagesDiv.innerHTML = '';
+  lastDate = null;
+  
+  const q = query(collection(db, 'messages'), orderBy('createdAt', 'asc'), limit(100));
+  
+  onSnapshot(q, snapshot => {
+    snapshot.docChanges().forEach(change => {
+      if (change.type === 'added') {
+        renderMessage(change.doc.data());
+      }
+    });
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  }, error => {
+    console.error("Firestore Error:", error);
+    if(error.code === 'failed-precondition') {
+      alert("Please create a Firestore Index. Check Browser Console for the link.");
     }
+  });
+}
 
-    html, body { height: 100%; overflow: hidden; }
+function renderMessage(data) {
+  if(!data.createdAt) return; // সার্ভার টাইমস্ট্যাম্প আসা পর্যন্ত অপেক্ষা করুন
 
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+  const date = data.createdAt.toDate();
+  const dateStr = date.toLocaleDateString();
 
-    /* ── LOADING ── */
-    #loading {
-      position: fixed; inset: 0;
+  if (dateStr !== lastDate) {
+    lastDate = dateStr;
+    const div = document.createElement('div');
+    div.className = 'day-divider';
+    div.textContent = date.toLocaleDateString([], { weekday:'long', month:'short', day:'numeric' });
+    messagesDiv.appendChild(div);
+  }
+
+  const isMine = data.uid === currentUser.uid;
+  const wrapper = document.createElement('div');
+  wrapper.className = `msg-wrapper ${isMine ? 'mine' : ''}`;
+  
+  wrapper.innerHTML = `
+    <img src="${data.photoURL}" class="msg-avatar" />
+    <div class="msg-bubble">${data.text}</div>
+  `;
+  messagesDiv.appendChild(wrapper);
+}
+
+// Search Logic
+document.getElementById('search-toggle-btn').onclick = () => {
+  const panel = document.getElementById('search-panel');
+  panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+};
+</script>
+</body>
+</html>
       background: var(--bg);
       display: flex; align-items: center; justify-content: center;
       font-size: 1.1rem; color: var(--muted); z-index: 999;
