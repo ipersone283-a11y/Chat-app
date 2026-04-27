@@ -1,179 +1,266 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="bn">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-  <title>Universal ChatRoom</title>
-  <style>
-    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-    :root {
-      --bg: #0f0f1a; --panel: #1a1a2e; --header: #16213e; --border: #2a2a4a;
-      --accent: #6366f1; --accent2: #8b5cf6; --text: #fff; --muted: #aaa;
-    }
-    body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-    
-    #loading { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 999; }
-    
-    #login-screen { display: none; text-align: center; padding: 40px; background: var(--panel); border-radius: 20px; box-shadow: 0 0 50px rgba(99,102,241,0.3); }
-    #google-btn { background: white; color: #333; border: none; padding: 12px 20px; border-radius: 10px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 10px; margin: 20px auto; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luxe Real Chat - 1vs1</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --accent: #38bdf8;
+            --text: #f1f5f9;
+            --my-msg: #0ea5e9;
+            --peer-msg: #334155;
+        }
 
-    #app { display: none; width: 100vw; height: 100vh; max-width: 800px; flex-direction: column; background: var(--panel); }
-    #header { padding: 15px; background: var(--header); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
-    #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
-    
-    .msg { max-width: 75%; padding: 10px 15px; border-radius: 15px; font-size: 14px; position: relative; }
-    .msg.mine { align-self: flex-end; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-bottom-right-radius: 2px; }
-    .msg.other { align-self: flex-start; background: var(--border); border-bottom-left-radius: 2px; }
-    .sender-name { font-size: 10px; color: #a5b4fc; margin-bottom: 3px; display: block; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
 
-    #input-area { padding: 15px; display: flex; gap: 10px; background: var(--header); }
-    #msg-input { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: white; outline: none; }
-    #send-btn { background: var(--accent); border: none; padding: 0 20px; border-radius: 10px; color: white; cursor: pointer; }
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex; justify-content: center; align-items: center;
+            height: 100dvh; overflow: hidden;
+        }
 
-    /* In-App Notification Toast */
-    #notification-toast {
-      position: fixed; top: -100px; left: 50%; transform: translateX(-50%);
-      background: #1e1e3a; border: 1px solid var(--accent); padding: 10px 20px;
-      border-radius: 30px; display: flex; align-items: center; gap: 10px;
-      transition: top 0.5s ease; z-index: 1000; box-shadow: 0 5px 20px rgba(0,0,0,0.5);
-    }
-    #notification-toast.show { top: 20px; }
-  </style>
+        #app-container {
+            width: 100%; max-width: 450px; height: 95vh;
+            background: var(--card); border-radius: 24px;
+            display: flex; flex-direction: column;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+            position: relative; margin: 10px;
+        }
+
+        /* Setup Screen */
+        #setup-screen {
+            padding: 30px; display: flex; flex-direction: column;
+            justify-content: center; height: 100%; text-align: center;
+        }
+
+        .avatar-picker {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 10px; margin: 20px 0;
+        }
+
+        .avatar-option {
+            font-size: 30px; cursor: pointer; padding: 10px;
+            border-radius: 12px; border: 2px solid transparent;
+            background: rgba(255,255,255,0.05);
+        }
+
+        .avatar-option.selected {
+            border-color: var(--accent); background: rgba(56, 189, 248, 0.2);
+        }
+
+        input {
+            width: 100%; padding: 14px; border-radius: 12px;
+            border: 1px solid #334155; background: #0f172a;
+            color: white; outline: none; margin-bottom: 15px;
+        }
+
+        button {
+            padding: 14px; border-radius: 12px; border: none;
+            background: var(--accent); color: white; font-weight: bold;
+            cursor: pointer; transition: 0.2s;
+        }
+
+        button:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        /* Chat Screen */
+        #chat-screen { display: none; flex-direction: column; height: 100%; }
+
+        #chat-header {
+            padding: 15px 20px; background: rgba(0,0,0,0.2);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        #message-area {
+            flex: 1; overflow-y: auto; padding: 20px;
+            display: flex; flex-direction: column; gap: 15px;
+        }
+
+        .msg-bubble {
+            max-width: 80%; display: flex; gap: 8px; align-items: flex-end;
+        }
+
+        .msg-content {
+            padding: 10px 16px; border-radius: 18px; font-size: 15px; line-height: 1.4;
+        }
+
+        .my-msg { align-self: flex-end; flex-direction: row-reverse; }
+        .my-msg .msg-content { background: var(--my-msg); border-bottom-right-radius: 4px; }
+
+        .peer-msg { align-self: flex-start; }
+        .peer-msg .msg-content { background: var(--peer-msg); border-bottom-left-radius: 4px; }
+
+        .msg-avatar { font-size: 20px; }
+
+        #input-container {
+            padding: 15px; display: flex; gap: 10px;
+            background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .id-badge {
+            font-size: 11px; background: #0f172a; color: var(--accent);
+            padding: 5px 10px; border-radius: 20px; border: 1px solid var(--accent);
+        }
+
+        .copy-btn { font-size: 10px; cursor: pointer; text-decoration: underline; }
+    </style>
 </head>
 <body>
 
-<div id="loading">Loading...</div>
-
-<div id="login-screen">
-    <h1>💬 Universal Chat</h1>
-    <button id="google-btn">
-        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20"> Sign in with Google
-    </button>
-</div>
-
-<div id="app">
-    <div id="header">
-        <div><strong>ChatRoom</strong><br><small id="online-count">● Live</small></div>
-        <img id="user-avatar" src="" width="35" style="border-radius: 50%; border: 2px solid var(--accent); cursor:pointer;">
-    </div>
-    <div id="messages"></div>
-    <div id="input-area">
-        <input type="text" id="msg-input" placeholder="Type message..." autocomplete="off">
-        <button id="send-btn">Send</button>
-    </div>
-</div>
-
-<div id="notification-toast">
-    <img id="notif-img" src="" width="30" style="border-radius:50%">
-    <div id="notif-text"></div>
-</div>
-
-<audio id="notif-sound" src="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3"></audio>
-
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-    const firebaseConfig = {
-        apiKey: "AIzaSyC7ZZPQZMhpF0387z7zttH_k7JLl1K2pG4",
-        authDomain: "my-chat-app-d6889.firebaseapp.com",
-        projectId: "my-chat-app-d6889",
-        storageBucket: "my-chat-app-d6889.firebasestorage.app",
-        messagingSenderId: "656889790538",
-        appId: "1:656889790538:web:25f264816e46624999e6b3"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-
-    const loading = document.getElementById('loading');
-    const appShell = document.getElementById('app');
-    const loginScreen = document.getElementById('login-screen');
-    const messagesDiv = document.getElementById('messages');
-    const msgInput = document.getElementById('msg-input');
-    const notifSound = document.getElementById('notif-sound');
-
-    let currentUser = null;
-    let isFirstLoad = true;
-
-    // --- Auth Logic ---
-    onAuthStateChanged(auth, user => {
-        loading.style.display = 'none';
-        if (user) {
-            currentUser = user;
-            document.getElementById('user-avatar').src = user.photoURL;
-            loginScreen.style.display = 'none';
-            appShell.style.display = 'flex';
-            startListening();
-        } else {
-            loginScreen.style.display = 'block';
-            appShell.style.display = 'none';
-        }
-    });
-
-    document.getElementById('google-btn').onclick = () => signInWithPopup(auth, new GoogleAuthProvider());
-    document.getElementById('user-avatar').onclick = () => { if(confirm("Logout?")) signOut(auth); };
-
-    // --- Message Logic ---
-    async function sendMessage() {
-        const text = msgInput.value.trim();
-        if (!text) return;
-        msgInput.value = '';
-        await addDoc(collection(db, 'messages'), {
-            text,
-            uid: currentUser.uid,
-            name: currentUser.displayName,
-            photoURL: currentUser.photoURL,
-            createdAt: serverTimestamp()
-        });
-    }
-
-    document.getElementById('send-btn').onclick = sendMessage;
-    msgInput.onkeydown = e => { if(e.key === 'Enter') sendMessage(); };
-
-    function startListening() {
-        const q = query(collection(db, 'messages'), orderBy('createdAt', 'asc'), limit(50));
+<div id="app-container">
+    <div id="setup-screen">
+        <h2 style="margin-bottom: 10px;">Luxe Chat</h2>
+        <p style="color: #94a3b8; font-size: 14px;">আপনার প্রোফাইল এবং অবতার বেছে নিন</p>
         
-        onSnapshot(q, snapshot => {
-            snapshot.docChanges().forEach(change => {
-                if (change.type === 'added') {
-                    const data = change.doc.data();
-                    renderMessage(data);
+        <div class="avatar-picker" id="avatarPicker">
+            <span class="avatar-option selected" onclick="selectAvatar(this)">😎</span>
+            <span class="avatar-option" onclick="selectAvatar(this)">👻</span>
+            <span class="avatar-option" onclick="selectAvatar(this)">🐱</span>
+            <span class="avatar-option" onclick="selectAvatar(this)">🤖</span>
+            <span class="avatar-option" onclick="selectAvatar(this)">🦊</span>
+            <span class="avatar-option" onclick="selectAvatar(this)">🦁</span>
+            <span class="avatar-option" onclick="selectAvatar(this)">🥷</span>
+            <span class="avatar-option" onclick="selectAvatar(this)">👽</span>
+        </div>
 
-                    // Notification Logic: Nijer message bade onno keu pathale
-                    if (!isFirstLoad && data.uid !== currentUser.uid) {
-                        showNotification(data);
-                    }
-                }
-            });
-            isFirstLoad = false;
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        <input type="text" id="userNameInput" placeholder="আপনার নাম">
+        <button onclick="initUser()">প্রবেশ করুন</button>
+        
+        <div id="connection-controls" style="display: none; margin-top: 20px;">
+            <p style="font-size: 12px; margin-bottom: 5px;">আপনার আইডি:</p>
+            <div id="myIdDisplay" style="color: var(--accent); font-weight: bold; margin-bottom: 15px; letter-spacing: 1px;">...</div>
+            <input type="text" id="peerIdInput" placeholder="বন্ধুর আইডি দিন">
+            <button onclick="connectToPeer()" style="width: 100%; background: #22c55e;">চ্যাট শুরু করুন</button>
+        </div>
+    </div>
+
+    <div id="chat-screen">
+        <div id="chat-header">
+            <div>
+                <span id="remote-avatar">💬</span>
+                <span id="remote-name" style="font-weight: bold; margin-left: 5px;">বন্ধুর নাম</span>
+            </div>
+            <div class="id-badge" onclick="copyMyId()">Copy My ID</div>
+        </div>
+        
+        <div id="message-area"></div>
+
+        <div id="input-container">
+            <input type="text" id="chatInput" placeholder="কিছু লিখুন..." style="margin-bottom: 0;">
+            <button onclick="sendChatMessage()">Send</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let peer, conn, myId, myName, myAvatar = "😎";
+
+    // ১. অবতার সিলেক্ট করা
+    function selectAvatar(el) {
+        document.querySelectorAll('.avatar-option').forEach(opt => opt.classList.remove('selected'));
+        el.classList.add('selected');
+        myAvatar = el.innerText;
+    }
+
+    // ২. ইউজার প্রোফাইল সেভ এবং পিয়ার তৈরি
+    function initUser() {
+        myName = document.getElementById('userNameInput').value.trim();
+        if(!myName) return alert("নাম দিন");
+
+        document.getElementById('userNameInput').disabled = true;
+        document.querySelector('#setup-screen button').style.display = "none";
+        document.getElementById('connection-controls').style.display = "block";
+
+        peer = new Peer();
+        peer.on('open', (id) => {
+            myId = id;
+            document.getElementById('myIdDisplay').innerText = id;
+        });
+
+        // ইনকামিং কানেকশন হ্যান্ডেল করা
+        peer.on('connection', (incomingConn) => {
+            conn = incomingConn;
+            handleConnection();
         });
     }
 
-    function renderMessage(data) {
-        const isMine = data.uid === currentUser.uid;
+    // ৩. বন্ধুর সাথে কানেক্ট করা
+    function connectToPeer() {
+        const friendId = document.getElementById('peerIdInput').value.trim();
+        if(!friendId) return alert("বন্ধুর আইডি দিন");
+        
+        conn = peer.connect(friendId, {
+            metadata: { name: myName, avatar: myAvatar }
+        });
+        handleConnection();
+    }
+
+    // ৪. কানেকশন লজিক
+    function handleConnection() {
+        conn.on('open', () => {
+            // কানেক্ট হওয়ার পর নিজের তথ্য পাঠানো (যদি নিজে রিসিভার হই)
+            if(conn.metadata) {
+                updatePeerUI(conn.metadata.name, conn.metadata.avatar);
+            }
+            conn.send({ type: 'info', name: myName, avatar: myAvatar });
+
+            document.getElementById('setup-screen').style.display = "none";
+            document.getElementById('chat-screen').style.display = "flex";
+        });
+
+        conn.on('data', (data) => {
+            if(data.type === 'info') {
+                updatePeerUI(data.name, data.avatar);
+            } else if(data.type === 'msg') {
+                renderMessage(data.avatar, data.text, 'peer-msg');
+            }
+        });
+    }
+
+    function updatePeerUI(name, avatar) {
+        document.getElementById('remote-name').innerText = name;
+        document.getElementById('remote-avatar').innerText = avatar;
+    }
+
+    // ৫. মেসেজ পাঠানো
+    function sendChatMessage() {
+        const text = document.getElementById('chatInput').value.trim();
+        if(!text || !conn) return;
+
+        conn.send({ type: 'msg', text: text, avatar: myAvatar });
+        renderMessage(myAvatar, text, 'my-msg');
+        document.getElementById('chatInput').value = "";
+    }
+
+    // ৬. চ্যাট স্ক্রিনে মেসেজ দেখানো
+    function renderMessage(avatar, text, type) {
+        const area = document.getElementById('message-area');
         const div = document.createElement('div');
-        div.className = `msg ${isMine ? 'mine' : 'other'}`;
+        div.className = `msg-bubble ${type}`;
         div.innerHTML = `
-            ${!isMine ? `<span class="sender-name">${data.name}</span>` : ''}
-            ${data.text}
+            <span class="msg-avatar">${avatar}</span>
+            <div class="msg-content">${text}</div>
         `;
-        messagesDiv.appendChild(div);
+        area.appendChild(div);
+        area.scrollTop = area.scrollHeight;
     }
 
-    function showNotification(data) {
-        const toast = document.getElementById('notification-toast');
-        document.getElementById('notif-img').src = data.photoURL;
-        document.getElementById('notif-text').innerHTML = `<strong>${data.name}</strong>: ${data.text.substring(0, 20)}...`;
-        
-        toast.classList.add('show');
-        notifSound.play().catch(e => console.log("Sound blocked by browser"));
-
-        setTimeout(() => toast.classList.remove('show'), 3000);
+    function copyMyId() {
+        navigator.clipboard.writeText(myId);
+        alert("আপনার ID কপি হয়েছে!");
     }
+
+    // Enter বাটনে মেসেজ সেন্ড
+    document.getElementById('chatInput').addEventListener('keypress', (e) => {
+        if(e.key === 'Enter') sendChatMessage();
+    });
 </script>
+
 </body>
 </html>
